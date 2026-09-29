@@ -1,0 +1,44 @@
+[package]
+name = "keylaut"
+version = "0.1.0"
+edition = "2021"
+authors = ["ByJonas"]
+description = "A tiny, native keyboard utility that makes German characters effortless on English keyboard layouts."
+readme = "README.md"
+license = "MIT"
+repository = "https://github.com/builtbyjonas/keylaut"
+homepage = "https://github.com/builtbyjonas/keylaut"
+keywords = ["keyboard", "german", "umlaut", "productivity", "utility"]
+categories = ["command-line-utilities", "os"]
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+dirs = "6.0"
+log = "0.4"
+env_logger = { version = "0.11", default-features = false, features = ["humantime"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.10"
+core-graphics = "0.24"
+libc = "0.2"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Threading",
+] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

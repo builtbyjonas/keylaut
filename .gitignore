@@ -1,0 +1,20 @@
+# Rust target directory
+target/
+
+# Rune directory
+.rune/
+
+
+
+# IDE and Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Keylaut local testing and logs
+scratch/
+*.log
+config.local.toml

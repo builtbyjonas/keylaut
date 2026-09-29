@@ -1,0 +1,63 @@
+name: Bug Report
+description: Report a problem or incorrect transformation in Keylaut
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report an issue!
+        **Privacy Reminder:** Please describe keystroke sequences (e.g. `ae + Space`) rather than posting personal or sensitive text.
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating System
+      description: What operating system and version are you using? (e.g., macOS 14.5 Sonoma, Windows 11 23H2, Ubuntu 24.04 X11)
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Keylaut Version
+      description: Run `keylaut --version` and paste the output.
+      placeholder: "keylaut 0.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: keyboard_layout
+    attributes:
+      label: Keyboard Layout
+      description: What physical and software keyboard layout are you using? (e.g. US QWERTY, UK Extended)
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Describe the input sequence typed.
+      placeholder: |
+        1. Typed 'schoen.'
+        2. Expected 'schön.'
+        3. Observed '...'
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect Keylaut to do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What happened instead?
+    validations:
+      required: true

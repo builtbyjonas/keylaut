@@ -1,0 +1,31 @@
+name: Security Audit
+
+on:
+  schedule:
+    - cron: '0 0 * * 1' # Weekly on Monday
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+
+permissions:
+  contents: read
+
+jobs:
+  security-audit:
+    name: Cargo Audit (Advisory DB)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Run security vulnerability audit
+        run: cargo audit

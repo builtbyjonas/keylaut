@@ -1,0 +1,117 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    name: Build Release Binary
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            artifact: keylaut-macos-x86_64.tar.gz
+            binary: keylaut
+            format: tar.gz
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            artifact: keylaut-macos-aarch64.tar.gz
+            binary: keylaut
+            format: tar.gz
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            artifact: keylaut-windows-x86_64.zip
+            binary: keylaut.exe
+            format: zip
+          - target: aarch64-pc-windows-msvc
+            os: windows-latest
+            artifact: keylaut-windows-aarch64.zip
+            binary: keylaut.exe
+            format: zip
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact: keylaut-linux-x86_64.tar.gz
+            binary: keylaut
+            format: tar.gz
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact: keylaut-linux-aarch64.tar.gz
+            binary: keylaut
+            format: tar.gz
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Linux Cross-Compilation Tools (aarch64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Build target release binary
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package Artifact (tar.gz)
+        if: matrix.format == 'tar.gz'
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar -czf ../../../${{ matrix.artifact }} ${{ matrix.binary }}
+          cd ../../..
+
+      - name: Package Artifact (zip)
+        if: matrix.format == 'zip'
+        shell: bash
+        run: |
+          cd target/${{ matrix.target }}/release
+          7z a ../../../${{ matrix.artifact }} ${{ matrix.binary }}
+          cd ../../..
+
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+
+  publish-release:
+    name: Publish Release & Checksums
+    needs: [build-release]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: Generate SHA256SUMS
+        run: |
+          cd release-artifacts
+          sha256sum * > ../SHA256SUMS
+          cd ..
+          cat SHA256SUMS
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-artifacts/*
+            SHA256SUMS
+          generate_release_notes: true

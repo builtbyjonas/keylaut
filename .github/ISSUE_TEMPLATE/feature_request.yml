@@ -1,0 +1,42 @@
+name: Feature Request
+description: Propose a minimal, focused addition to Keylaut
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Keylaut is intentionally tiny and focused on effortless German text entry.
+        Features that introduce complex text expansion, full spellchecking, or heavy frameworks are out of scope.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: What limitation or friction are you experiencing?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed_behavior
+    attributes:
+      label: Proposed Behavior
+      description: Describe what you would like Keylaut to do.
+    validations:
+      required: true
+
+  - type: textarea
+    id: example
+    attributes:
+      label: Concrete Example
+      description: Provide an exact example sequence and expected result.
+    validations:
+      required: true
+
+  - type: textarea
+    id: justification
+    attributes:
+      label: Why Existing Functionality Isn't Sufficient
+      description: Why does this belong in Keylaut's minimal core rather than an external text tool?
+    validations:
+      required: true

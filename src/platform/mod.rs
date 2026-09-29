@@ -131,3 +131,62 @@ pub fn autostart_status() -> Result<bool, std::io::Error> {
         Ok(false)
     }
 }
+
+/// Returns the PID of any currently active Keylaut process or service.
+pub fn running_pid() -> Option<u32> {
+    #[cfg(target_os = "macos")]
+    {
+        macos::running_pid()
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        windows::running_pid()
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        linux::running_pid()
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+        None
+    }
+}
+
+/// Terminates a running Keylaut process.
+pub fn stop_pid(pid: u32) {
+    #[cfg(target_os = "macos")]
+    {
+        macos::stop_pid(pid);
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        windows::stop_pid(pid);
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        linux::stop_pid(pid);
+    }
+
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+    {
+        let _ = pid;
+    }
+}
+
+/// Requests platform keyboard/accessibility permissions.
+pub fn request_permissions() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        macos::request_permissions()
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        true
+    }
+}

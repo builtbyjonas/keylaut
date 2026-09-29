@@ -10,6 +10,10 @@ fn default_true() -> bool {
     true
 }
 
+fn default_bypass_key() -> BypassKey {
+    BypassKey::Alt
+}
+
 fn default_mappings() -> HashMap<String, String> {
     let mut map = HashMap::new();
     map.insert("ae".to_string(), "ä".to_string());
@@ -17,6 +21,61 @@ fn default_mappings() -> HashMap<String, String> {
     map.insert("ue".to_string(), "ü".to_string());
     map.insert("ss".to_string(), "ß".to_string());
     map
+}
+
+/// Modifier key held while typing to temporarily bypass character replacement.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum BypassKey {
+    /// Option on macOS, Alt on Windows and Linux.
+    #[serde(alias = "option")]
+    Alt,
+    /// Control key.
+    #[serde(alias = "control")]
+    Ctrl,
+    /// Shift key.
+    Shift,
+    /// Command key on macOS, Windows/Super key on Windows and Linux.
+    #[serde(alias = "cmd", alias = "command")]
+    Meta,
+    /// Bypass disabled (all words subject to normal mapping rules).
+    None,
+}
+
+impl Default for BypassKey {
+    fn default() -> Self {
+        Self::Alt
+    }
+}
+
+impl BypassKey {
+    /// Checks whether this bypass modifier is currently active in the given modifier state.
+    pub fn is_active(&self, modifiers: &crate::core::event::Modifiers) -> bool {
+        match self {
+            Self::Alt => modifiers.alt,
+            Self::Ctrl => modifiers.ctrl,
+            Self::Shift => modifiers.shift,
+            Self::Meta => modifiers.meta,
+            Self::None => false,
+        }
+    }
+
+    /// User-friendly display name of the bypass key.
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            #[cfg(target_os = "macos")]
+            Self::Alt => "Option (⌥)",
+            #[cfg(not(target_os = "macos"))]
+            Self::Alt => "Alt",
+            Self::Ctrl => "Control",
+            Self::Shift => "Shift",
+            #[cfg(target_os = "macos")]
+            Self::Meta => "Command (⌘)",
+            #[cfg(not(target_os = "macos"))]
+            Self::Meta => "Meta / Super",
+            Self::None => "None (disabled)",
+        }
+    }
 }
 
 /// Keylaut application configuration.
@@ -37,6 +96,12 @@ pub struct Config {
     /// Whether startup autostart is requested.
     #[serde(default)]
     pub autostart: bool,
+
+    /// Key to hold while typing to bypass German character replacement.
+    /// Default: "alt" (Option on macOS, Alt on Windows/Linux).
+    /// Options: "alt", "option", "ctrl", "control", "shift", "none".
+    #[serde(default = "default_bypass_key")]
+    pub bypass_key: BypassKey,
 }
 
 impl Default for Config {
@@ -46,6 +111,7 @@ impl Default for Config {
             mappings: default_mappings(),
             timeout_ms: None,
             autostart: false,
+            bypass_key: BypassKey::default(),
         }
     }
 }

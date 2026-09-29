@@ -71,3 +71,20 @@ If you prefer candidates to convert after an idle delay, you can set `timeout_ms
 # Milliseconds to wait before committing candidate
 timeout_ms = 750
 ```
+
+---
+
+## Hold-to-Bypass Key
+
+To type words or code containing `ae`, `oe`, `ue`, or `ss` literally without replacement, hold the bypass key while typing or when pressing the delimiter (Space, Enter, etc.):
+
+```toml
+# Key to hold while typing to temporarily bypass replacement
+# Options: "alt" (or "option"), "ctrl" (or "control"), "shift", "none"
+# Default: "alt" (Option on macOS, Alt on Windows/Linux)
+bypass_key = "alt"
+```
+
+* **macOS:** Hold the `Option` (`⌥`) key while typing or pressing Space to keep the original letters.
+* **Windows & Linux:** Hold the `Alt` key while typing or pressing Space.
+* Setting `bypass_key = "none"` disables the hold-to-bypass shortcut.

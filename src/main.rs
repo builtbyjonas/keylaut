@@ -21,13 +21,42 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .format_timestamp_secs()
         .init();
 
+    let force = matches!(cli.command, Some(Commands::Run { force: true }));
+
     match cli.command {
-        None | Some(Commands::Run) => {
+        None | Some(Commands::Run { .. }) => {
+            let running_pid = platform::running_pid();
+            if let Some(pid) = running_pid {
+                if force {
+                    println!(
+                        "Stopping existing Keylaut background process (PID {})...",
+                        pid
+                    );
+                    platform::stop_pid(pid);
+                } else {
+                    println!(
+                        "Keylaut is already running in the background (PID {}).",
+                        pid
+                    );
+                    println!("German character detection is active (ä ö ü ß).");
+                    println!("Keystrokes stay strictly local on your machine.");
+                    println!("\nTo manage Keylaut:");
+                    println!("  keylaut status      # Inspect active status and settings");
+                    println!("  keylaut stop        # Stop the background service");
+                    println!("  keylaut run --force # Stop background service and run here in foreground");
+                    return Ok(());
+                }
+            }
+
             let config = Config::load_default();
             log::info!("Starting Keylaut with enabled={}", config.enabled);
 
             println!("Keylaut started. German character detection active (ä ö ü ß).");
             println!("Keystrokes stay strictly local on your machine.");
+            println!(
+                "Hold {} while typing to bypass replacement.",
+                config.bypass_key.display_name()
+            );
 
             let engine = KeylautEngine::new(config);
             if let Err(err) = platform::run(engine) {
@@ -37,20 +66,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         Some(Commands::Start) => {
+            if let Some(pid) = platform::running_pid() {
+                platform::stop_pid(pid);
+            }
             platform::autostart_enable()?;
             println!("Keylaut background service started and configured for automatic startup.");
         }
 
         Some(Commands::Stop) => {
+            let pid = platform::running_pid();
             platform::autostart_disable()?;
+            if let Some(pid) = pid {
+                platform::stop_pid(pid);
+            }
             println!("Keylaut background service stopped.");
         }
 
         Some(Commands::Status) => {
             println!("Keylaut Status:");
-            match platform::check_permissions() {
-                Ok(()) => println!("  Permissions: OK (Global keyboard access granted)"),
-                Err(e) => println!("  Permissions: REQUIRED\n  {}", e.replace('\n', "\n  ")),
+
+            let running_pid = platform::running_pid();
+            if let Some(pid) = running_pid {
+                println!("  Service:     Active / Running (PID {})", pid);
+                println!("  Permissions: OK (Global keyboard access active in running process)");
+            } else {
+                println!("  Service:     Stopped");
+                match platform::check_permissions() {
+                    Ok(()) => println!("  Permissions: OK (Global keyboard access granted)"),
+                    Err(e) => println!("  Permissions: REQUIRED\n  {}", e.replace('\n', "\n  ")),
+                }
             }
 
             match platform::autostart_status() {
@@ -65,8 +109,39 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if config.enabled { "Yes" } else { "No" }
             );
 
+            println!(
+                "  Bypass key:  {} (hold while typing to bypass replacement)",
+                config.bypass_key.display_name()
+            );
+
+            let mut mappings_list: Vec<_> = config.mappings.iter().collect();
+            mappings_list.sort_by_key(|(k, _)| (*k).clone());
+            let mappings_str = mappings_list
+                .iter()
+                .map(|(k, v)| format!("{} → {}", k, v))
+                .collect::<Vec<_>>()
+                .join(", ");
+            println!(
+                "  Mappings:    {} active ({})",
+                config.mappings.len(),
+                mappings_str
+            );
+
             if let Some(path) = Config::default_path() {
                 println!("  Config path: {}", path.display());
+            }
+        }
+
+        Some(Commands::Permissions) => {
+            println!("Checking global keyboard access permissions...");
+            let trusted = platform::request_permissions();
+            if trusted {
+                println!("Permissions: OK (Global keyboard access granted)");
+            } else {
+                match platform::check_permissions() {
+                    Ok(()) => println!("Permissions: OK (Global keyboard access granted)"),
+                    Err(e) => println!("Permissions: REQUIRED\n{}", e),
+                }
             }
         }
 

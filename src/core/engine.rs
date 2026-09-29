@@ -16,7 +16,7 @@ impl KeylautEngine {
     /// Creates a new Keylaut engine with the provided configuration.
     pub fn new(config: Config) -> Self {
         let mappings = MappingTable::from_custom(&config.mappings);
-        let state_machine = StateMachine::new(config.timeout_ms);
+        let state_machine = StateMachine::new(config.timeout_ms, config.bypass_key);
 
         Self {
             config,
@@ -50,11 +50,11 @@ impl KeylautEngine {
         }
     }
 
-    /// Reloads the engine with a updated configuration.
+    /// Reloads the engine with an updated configuration.
     pub fn reload_config(&mut self, config: Config) {
         self.mappings = MappingTable::from_custom(&config.mappings);
+        self.state_machine = StateMachine::new(config.timeout_ms, config.bypass_key);
         self.config = config;
-        self.state_machine.reset();
     }
 
     /// Returns the current state of the internal state machine.

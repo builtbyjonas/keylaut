@@ -7,6 +7,11 @@ use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
+use core_foundation::base::TCFType;
+use core_foundation::boolean::CFBoolean;
+use core_foundation::dictionary::CFDictionary;
+use core_foundation::string::CFString;
+
 use crate::core::event::{Key, KeyAction, KeyEvent, Modifiers};
 use crate::core::state::EngineAction;
 use crate::core::KeylautEngine;
@@ -97,29 +102,158 @@ extern "C" {
     fn CFRelease(cf: *mut c_void);
 
     fn AXIsProcessTrusted() -> bool;
+    fn AXIsProcessTrustedWithOptions(options: *const c_void) -> bool;
 }
 
 static ENGINE_HOLDER: Mutex<Option<KeylautEngine>> = Mutex::new(None);
 static RUNLOOP_HOLDER: Mutex<Option<usize>> = Mutex::new(None);
 static SHUTDOWN_FLAG: AtomicBool = AtomicBool::new(false);
 
+const LAUNCH_AGENT_LABEL: &str = "com.builtbyjonas.keylaut";
+
+/// Requests macOS Accessibility permissions by showing the system permission dialog.
+pub fn request_permissions() -> bool {
+    let key = CFString::from_static_string("AXTrustedCheckOptionPrompt");
+    let value = CFBoolean::true_value();
+    let dict = CFDictionary::from_CFType_pairs(&[(key, value)]);
+    unsafe { AXIsProcessTrustedWithOptions(dict.as_concrete_TypeRef() as *const c_void) }
+}
+
+/// Returns the PID file path for Keylaut.
+pub fn pid_file_path() -> Option<PathBuf> {
+    dirs::data_dir().map(|p| p.join("Keylaut").join("keylaut.pid"))
+}
+
+/// Checks launchctl for the active background service PID.
+pub fn running_service_pid() -> Option<u32> {
+    let output = Command::new("launchctl")
+        .arg("list")
+        .arg(LAUNCH_AGENT_LABEL)
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let text = String::from_utf8_lossy(&output.stdout);
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("\"PID\"") {
+            if let Some(pos) = trimmed.find('=') {
+                let num_str = trimmed[pos + 1..].trim_matches(|c: char| !c.is_ascii_digit());
+                if let Ok(pid) = num_str.parse::<u32>() {
+                    return Some(pid);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Returns the PID of any currently running Keylaut process (service or daemon).
+pub fn running_pid() -> Option<u32> {
+    let current_pid = std::process::id();
+
+    // 1. Check launchd service
+    if let Some(pid) = running_service_pid() {
+        if pid != current_pid && is_pid_alive(pid) {
+            return Some(pid);
+        }
+    }
+
+    // 2. Check PID file
+    if let Some(path) = pid_file_path() {
+        if path.exists() {
+            if let Ok(content) = fs::read_to_string(&path) {
+                if let Ok(pid) = content.trim().parse::<u32>() {
+                    if pid != current_pid && is_pid_alive(pid) {
+                        return Some(pid);
+                    } else if pid != current_pid {
+                        let _ = fs::remove_file(&path);
+                    }
+                }
+            }
+        }
+    }
+
+    None
+}
+
+/// Checks whether a process with the given PID is currently alive.
+fn is_pid_alive(pid: u32) -> bool {
+    unsafe { libc::kill(pid as i32, 0) == 0 }
+}
+
+/// Stops a running Keylaut process.
+pub fn stop_pid(pid: u32) {
+    unsafe {
+        let _ = libc::kill(pid as i32, libc::SIGTERM);
+    }
+    remove_pid_file();
+}
+
+/// Writes the current process PID to the PID file.
+fn write_pid_file() {
+    if let Some(path) = pid_file_path() {
+        if let Some(parent) = path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let _ = fs::write(path, std::process::id().to_string());
+    }
+}
+
+/// Removes the PID file.
+fn remove_pid_file() {
+    if let Some(path) = pid_file_path() {
+        let _ = fs::remove_file(path);
+    }
+}
+
 /// Checks macOS Accessibility permissions.
 pub fn check_permissions() -> Result<(), String> {
     unsafe {
         if AXIsProcessTrusted() {
-            Ok(())
-        } else {
-            Err("Keylaut could not access global keyboard input.\n\n\
-                On macOS, enable Keylaut under:\n\
-                System Settings → Privacy & Security → Accessibility."
-                .to_string())
+            return Ok(());
         }
+
+        // Test if an actual CGEventTap can be created.
+        let mask: CGEventMask = 1 << K_CG_EVENT_KEY_DOWN;
+        let tap = CGEventTapCreate(
+            K_CGHID_EVENT_TAP,
+            K_CG_HEAD_INSERT_EVENT_TAP,
+            K_CG_EVENT_TAP_OPTION_DEFAULT,
+            mask,
+            event_tap_callback,
+            std::ptr::null_mut(),
+        );
+        if !tap.is_null() {
+            CFRelease(tap);
+            return Ok(());
+        }
+
+        Err("Keylaut could not access global keyboard input.\n\n\
+            On macOS, Accessibility permission is required:\n\
+              1. Open System Settings → Privacy & Security → Accessibility.\n\
+              2. Ensure Keylaut is toggled ON in the list.\n\
+              3. If running from a terminal (e.g. Terminal, iTerm2, Antigravity IDE),\n\
+                 ensure your terminal application is also granted Accessibility permission.\n\
+              4. Or run Keylaut as a background service: keylaut start"
+            .to_string())
     }
 }
 
 /// Runs the macOS event tap loop.
 pub fn run(engine: KeylautEngine) -> Result<(), String> {
+    // If process is not yet trusted, prompt macOS permission dialog
+    if !unsafe { AXIsProcessTrusted() } {
+        request_permissions();
+    }
+
     check_permissions()?;
+
+    // Record PID for single-instance tracking
+    write_pid_file();
 
     {
         let mut guard = ENGINE_HOLDER.lock().unwrap();
@@ -139,6 +273,7 @@ pub fn run(engine: KeylautEngine) -> Result<(), String> {
         );
 
         if tap_port.is_null() {
+            remove_pid_file();
             return Err(
                 "Failed to create macOS CGEventTap. Please grant Accessibility permissions in System Settings."
                     .to_string(),
@@ -148,6 +283,7 @@ pub fn run(engine: KeylautEngine) -> Result<(), String> {
         let loop_source = CFMachPortCreateRunLoopSource(std::ptr::null_mut(), tap_port, 0);
         if loop_source.is_null() {
             CFRelease(tap_port);
+            remove_pid_file();
             return Err("Failed to create CFRunLoopSource for Event Tap.".to_string());
         }
 
@@ -167,6 +303,7 @@ pub fn run(engine: KeylautEngine) -> Result<(), String> {
         CGEventTapEnable(tap_port, false);
         CFRelease(loop_source);
         CFRelease(tap_port);
+        remove_pid_file();
     }
 
     Ok(())
@@ -175,6 +312,7 @@ pub fn run(engine: KeylautEngine) -> Result<(), String> {
 /// Gracefully stops the running event loop.
 pub fn stop() {
     SHUTDOWN_FLAG.store(true, Ordering::SeqCst);
+    remove_pid_file();
     let rl = {
         let mut guard = RUNLOOP_HOLDER.lock().unwrap();
         guard.take()
@@ -326,8 +464,6 @@ unsafe fn inject_unicode_string(text: &str) {
 // macOS Autostart via LaunchAgent
 // ---------------------------------------------------------------------------
 
-const LAUNCH_AGENT_LABEL: &str = "com.builtbyjonas.keylaut";
-
 fn launch_agent_path() -> Result<PathBuf, std::io::Error> {
     let home = dirs::home_dir().ok_or_else(|| {
         std::io::Error::new(
@@ -404,6 +540,7 @@ pub fn autostart_disable() -> Result<(), std::io::Error> {
             .status();
         let _ = fs::remove_file(&plist_path);
     }
+    remove_pid_file();
     Ok(())
 }
 

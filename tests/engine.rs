@@ -384,3 +384,138 @@ fn test_fuzz_random_event_sequences() {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// 10. Hold-to-Bypass Feature Tests
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_hold_alt_on_delimiter_bypasses_replacement() {
+    let mut engine = KeylautEngine::new(Config::default());
+
+    // Type "ae" without modifiers
+    engine.process_event(KeyEvent::char_press('a', Modifiers::NONE));
+    engine.process_event(KeyEvent::char_press('e', Modifiers::NONE));
+
+    // Space pressed with Alt held (Option on Mac)
+    let alt_space = KeyEvent::press(
+        Key::Space,
+        Modifiers {
+            alt: true,
+            ..Modifiers::NONE
+        },
+    );
+    let action = engine.process_event(alt_space);
+
+    // Must NOT replace with "ä " - must pass through!
+    assert_eq!(action, EngineAction::Pass);
+    assert_eq!(engine.current_word(), "");
+}
+
+#[test]
+fn test_hold_alt_during_typing_bypasses_replacement() {
+    let mut engine = KeylautEngine::new(Config::default());
+
+    let alt_mod = Modifiers {
+        alt: true,
+        ..Modifiers::NONE
+    };
+
+    // Type "f" (normal), "u" (normal), "e" (with Alt held), "r" (normal)
+    engine.process_event(KeyEvent::char_press('f', Modifiers::NONE));
+    engine.process_event(KeyEvent::char_press('u', Modifiers::NONE));
+    engine.process_event(KeyEvent::char_press('e', alt_mod));
+    engine.process_event(KeyEvent::char_press('r', Modifiers::NONE));
+
+    // Delimiter typed normally without Alt
+    let action = engine.process_event(KeyEvent::press(Key::Space, Modifiers::NONE));
+
+    // Must NOT replace "fuer" with "für", because Alt was held during word typing!
+    assert_eq!(action, EngineAction::Pass);
+    assert_eq!(engine.current_word(), "");
+}
+
+#[test]
+fn test_hold_alt_does_not_affect_next_word() {
+    let mut engine = KeylautEngine::new(Config::default());
+
+    // Word 1: "ae" + Alt-Space -> bypassed, not replaced
+    engine.process_event(KeyEvent::char_press('a', Modifiers::NONE));
+    engine.process_event(KeyEvent::char_press('e', Modifiers::NONE));
+    let action1 = engine.process_event(KeyEvent::press(
+        Key::Space,
+        Modifiers {
+            alt: true,
+            ..Modifiers::NONE
+        },
+    ));
+    assert_eq!(action1, EngineAction::Pass);
+
+    // Word 2: "oe" + normal Space -> SHOULD be replaced with "ö "
+    engine.process_event(KeyEvent::char_press('o', Modifiers::NONE));
+    engine.process_event(KeyEvent::char_press('e', Modifiers::NONE));
+    let action2 = engine.process_event(KeyEvent::press(Key::Space, Modifiers::NONE));
+    assert_eq!(
+        action2,
+        EngineAction::Replace {
+            backspaces: 2,
+            text: "ö ".to_string()
+        }
+    );
+}
+
+#[test]
+fn test_configurable_bypass_key_ctrl() {
+    use keylaut::core::config::BypassKey;
+
+    let config = Config {
+        bypass_key: BypassKey::Ctrl,
+        ..Default::default()
+    };
+    let mut engine = KeylautEngine::new(config);
+
+    // Type "ue"
+    engine.process_event(KeyEvent::char_press('u', Modifiers::NONE));
+    engine.process_event(KeyEvent::char_press('e', Modifiers::NONE));
+
+    // Space with Ctrl held
+    let action = engine.process_event(KeyEvent::press(
+        Key::Space,
+        Modifiers {
+            ctrl: true,
+            ..Modifiers::NONE
+        },
+    ));
+    assert_eq!(action, EngineAction::Pass);
+}
+
+#[test]
+fn test_bypass_key_none_does_not_bypass() {
+    use keylaut::core::config::BypassKey;
+
+    let config = Config {
+        bypass_key: BypassKey::None,
+        ..Default::default()
+    };
+    let mut engine = KeylautEngine::new(config);
+
+    // Type "ae"
+    engine.process_event(KeyEvent::char_press('a', Modifiers::NONE));
+    engine.process_event(KeyEvent::char_press('e', Modifiers::NONE));
+
+    // Space with Alt held: since bypass_key is None, Alt does NOT bypass
+    let action = engine.process_event(KeyEvent::press(
+        Key::Space,
+        Modifiers {
+            alt: true,
+            ..Modifiers::NONE
+        },
+    ));
+    assert_eq!(
+        action,
+        EngineAction::Replace {
+            backspaces: 2,
+            text: "ä ".to_string()
+        }
+    );
+}

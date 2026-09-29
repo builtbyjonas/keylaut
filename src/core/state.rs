@@ -3,6 +3,7 @@
 use std::collections::HashSet;
 use std::time::Instant;
 
+use super::config::BypassKey;
 use super::event::{Key, KeyAction, KeyEvent};
 use super::mappings::MappingTable;
 
@@ -49,11 +50,13 @@ pub struct StateMachine {
     last_event_time: Option<Instant>,
     timeout_ms: Option<u64>,
     english_false_positives: HashSet<&'static str>,
+    bypass_key: BypassKey,
+    word_bypassed: bool,
 }
 
 impl Default for StateMachine {
     fn default() -> Self {
-        Self::new(None)
+        Self::new(None, BypassKey::default())
     }
 }
 
@@ -61,14 +64,32 @@ impl StateMachine {
     /// Maximum buffer size for word tokens to guarantee tiny memory footprint.
     pub const MAX_BUFFER_LEN: usize = 48;
 
-    pub fn new(timeout_ms: Option<u64>) -> Self {
+    pub fn new(timeout_ms: Option<u64>, bypass_key: BypassKey) -> Self {
         Self {
             state: State::Idle,
             word_buffer: String::with_capacity(Self::MAX_BUFFER_LEN),
             last_event_time: None,
             timeout_ms,
             english_false_positives: Self::init_false_positives(),
+            bypass_key,
+            word_bypassed: false,
         }
+    }
+
+    /// Sets or changes the bypass key on this state machine.
+    pub fn with_bypass_key(mut self, bypass_key: BypassKey) -> Self {
+        self.bypass_key = bypass_key;
+        self
+    }
+
+    /// Returns the configured bypass key.
+    pub fn bypass_key(&self) -> BypassKey {
+        self.bypass_key
+    }
+
+    /// Returns whether the current in-flight word has been marked as bypassed.
+    pub fn is_bypassed(&self) -> bool {
+        self.word_bypassed
     }
 
     /// Returns the current state machine state.
@@ -96,6 +117,7 @@ impl StateMachine {
         self.state = State::Idle;
         self.word_buffer.clear();
         self.last_event_time = None;
+        self.word_bypassed = false;
     }
 
     /// Evaluates whether a word sequence should be rejected to prevent false positives.
@@ -145,6 +167,12 @@ impl StateMachine {
             return EngineAction::Pass;
         }
 
+        // Check if the configured bypass key is active on this event
+        let is_bypass_active = self.bypass_key.is_active(&event.modifiers);
+        if is_bypass_active {
+            self.word_bypassed = true;
+        }
+
         self.last_event_time = Some(Instant::now());
 
         match &event.key {
@@ -152,9 +180,13 @@ impl StateMachine {
             Key::Backspace => {
                 if !self.word_buffer.is_empty() {
                     self.word_buffer.pop();
+                    if self.word_buffer.is_empty() {
+                        self.word_bypassed = false;
+                    }
                     self.update_candidate_state(mappings);
                 } else {
                     self.state = State::Idle;
+                    self.word_bypassed = false;
                 }
                 EngineAction::Pass
             }
@@ -178,19 +210,19 @@ impl StateMachine {
             Key::Modifier | Key::Other => EngineAction::Pass,
 
             // Space is a primary word boundary delimiter
-            Key::Space => self.handle_delimiter(' ', mappings),
+            Key::Space => self.handle_delimiter(' ', mappings, is_bypass_active),
 
             // Enter / Return is a word boundary delimiter
-            Key::Enter => self.handle_delimiter('\n', mappings),
+            Key::Enter => self.handle_delimiter('\n', mappings, is_bypass_active),
 
             // Tab is a word boundary delimiter
-            Key::Tab => self.handle_delimiter('\t', mappings),
+            Key::Tab => self.handle_delimiter('\t', mappings, is_bypass_active),
 
             // Character input
             Key::Char(c) => {
                 let ch = *c;
                 if is_delimiter(ch) {
-                    self.handle_delimiter(ch, mappings)
+                    self.handle_delimiter(ch, mappings, is_bypass_active)
                 } else {
                     self.handle_char(ch, mappings);
                     EngineAction::Pass
@@ -232,17 +264,23 @@ impl StateMachine {
     }
 
     /// Handles word boundary delimiters (space, punctuation, enter, tab).
-    fn handle_delimiter(&mut self, delimiter: char, mappings: &MappingTable) -> EngineAction {
+    fn handle_delimiter(
+        &mut self,
+        delimiter: char,
+        mappings: &MappingTable,
+        bypass_active_now: bool,
+    ) -> EngineAction {
         if self.word_buffer.is_empty() {
             self.reset();
             return EngineAction::Pass;
         }
 
         let word = std::mem::take(&mut self.word_buffer);
-        self.state = State::Idle;
+        let was_bypassed = self.word_bypassed || bypass_active_now;
+        self.reset();
 
-        // Check rejection rules before considering transformation
-        if self.is_rejected(&word) {
+        // If bypass key was held or word is rejected, do not transform
+        if was_bypassed || self.is_rejected(&word) {
             return EngineAction::Pass;
         }
 
@@ -608,5 +646,67 @@ mod tests {
         machine.process_event(&KeyEvent::press(Key::Escape, Modifiers::NONE), &mappings);
         assert_eq!(machine.state(), &State::Idle);
         assert_eq!(machine.current_word(), "");
+    }
+
+    #[test]
+    fn test_bypass_key_alt_on_delimiter() {
+        let mut machine = StateMachine::default();
+        let mappings = MappingTable::with_defaults();
+
+        // Type "ae" normally
+        machine.process_event(&KeyEvent::char_press('a', Modifiers::NONE), &mappings);
+        machine.process_event(&KeyEvent::char_press('e', Modifiers::NONE), &mappings);
+
+        // Press Space while holding Alt (Option on macOS)
+        let alt_mod = Modifiers {
+            alt: true,
+            ..Modifiers::NONE
+        };
+        let action = machine.process_event(&KeyEvent::press(Key::Space, alt_mod), &mappings);
+
+        // Must NOT replace, must Pass unmodified
+        assert_eq!(action, EngineAction::Pass);
+        assert_eq!(machine.current_word(), "");
+    }
+
+    #[test]
+    fn test_bypass_key_held_during_word() {
+        let mut machine = StateMachine::default();
+        let mappings = MappingTable::with_defaults();
+
+        let alt_mod = Modifiers {
+            alt: true,
+            ..Modifiers::NONE
+        };
+
+        // Type "fuer" with Alt held on one of the characters
+        machine.process_event(&KeyEvent::char_press('f', Modifiers::NONE), &mappings);
+        machine.process_event(&KeyEvent::char_press('u', alt_mod), &mappings);
+        machine.process_event(&KeyEvent::char_press('e', Modifiers::NONE), &mappings);
+        machine.process_event(&KeyEvent::char_press('r', Modifiers::NONE), &mappings);
+
+        // Delimiter typed without Alt
+        let action =
+            machine.process_event(&KeyEvent::press(Key::Space, Modifiers::NONE), &mappings);
+
+        // Because Alt was held while typing the word, it must be bypassed
+        assert_eq!(action, EngineAction::Pass);
+    }
+
+    #[test]
+    fn test_bypass_key_ctrl_configured() {
+        let mut machine = StateMachine::new(None, BypassKey::Ctrl);
+        let mappings = MappingTable::with_defaults();
+
+        let ctrl_mod = Modifiers {
+            ctrl: true,
+            ..Modifiers::NONE
+        };
+
+        machine.process_event(&KeyEvent::char_press('a', Modifiers::NONE), &mappings);
+        machine.process_event(&KeyEvent::char_press('e', Modifiers::NONE), &mappings);
+
+        let action = machine.process_event(&KeyEvent::press(Key::Space, ctrl_mod), &mappings);
+        assert_eq!(action, EngineAction::Pass);
     }
 }

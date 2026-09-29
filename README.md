@@ -119,11 +119,25 @@ Keylaut never stores typed text, never records keyboard history, and never trans
 
 ---
 
+## Hold-to-Bypass
+
+Need to write code or English words containing `ae`, `oe`, `ue`, or `ss` literally without replacement?
+
+**Just hold the bypass key while typing or when hitting Space:**
+
+* **macOS:** Hold `Option` (`⌥`) while typing or pressing Space.
+* **Windows & Linux:** Hold `Alt` while typing or pressing Space.
+
+Keylaut immediately leaves your text exactly as typed. You can also configure the bypass key to `ctrl`, `shift`, or `none`.
+
+---
+
 ## CLI Commands
 
 ```bash
-# Run in foreground
+# Run in foreground (automatically detects if service is already running)
 keylaut
+keylaut run --force  # Take over foreground by stopping background service
 
 # Start as background service (configured for user login)
 keylaut start
@@ -131,8 +145,11 @@ keylaut start
 # Stop background service
 keylaut stop
 
-# Check operational and permission status
+# Check operational, service, and permission status
 keylaut status
+
+# Verify or request system keyboard access permissions
+keylaut permissions
 
 # Temporarily enable/disable transformation without quitting
 keylaut enable
@@ -160,6 +177,7 @@ Keylaut operates out of the box with zero configuration. When needed, configurat
 
 ```toml
 enabled = true
+bypass_key = "alt" # Hold Option/Alt to bypass replacement (options: "alt", "ctrl", "shift", "none")
 
 [mappings]
 ae = "ä"

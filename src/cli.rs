@@ -24,7 +24,11 @@ pub struct Cli {
 #[derive(Subcommand, Debug)]
 pub enum Commands {
     /// Run the Keylaut background listener (default when no command is given)
-    Run,
+    Run {
+        /// Force run in foreground, stopping any existing background service instance
+        #[arg(short, long)]
+        force: bool,
+    },
 
     /// Start Keylaut as a background service via system launcher
     Start,
@@ -32,8 +36,11 @@ pub enum Commands {
     /// Stop the background Keylaut process or service
     Stop,
 
-    /// Display Keylaut operational and autostart status
+    /// Display Keylaut operational, running, and autostart status
     Status,
+
+    /// Check or request system keyboard access permissions
+    Permissions,
 
     /// Enable Keylaut character transformation in configuration
     Enable,

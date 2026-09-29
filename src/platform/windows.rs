@@ -327,3 +327,11 @@ pub fn autostart_status() -> Result<bool, std::io::Error> {
     let shortcut_path = startup_shortcut_path()?;
     Ok(shortcut_path.exists())
 }
+
+/// Checks if a background Keylaut process is running on Windows.
+pub fn running_pid() -> Option<u32> {
+    None
+}
+
+/// Stops a running Keylaut process on Windows.
+pub fn stop_pid(_pid: u32) {}

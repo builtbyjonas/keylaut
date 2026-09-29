@@ -212,3 +212,29 @@ pub fn autostart_status() -> Result<bool, std::io::Error> {
     }
     Ok(false)
 }
+
+/// Checks if a background Keylaut service or daemon is running on Linux.
+pub fn running_pid() -> Option<u32> {
+    let output = Command::new("systemctl")
+        .args(["--user", "show", "keylaut.service", "--property=MainPID"])
+        .output()
+        .ok()?;
+    if output.status.success() {
+        let text = String::from_utf8_lossy(&output.stdout);
+        if let Some(pid_str) = text.trim().strip_prefix("MainPID=") {
+            if let Ok(pid) = pid_str.parse::<u32>() {
+                if pid > 0 && pid != std::process::id() {
+                    return Some(pid);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Stops a running Keylaut process on Linux.
+pub fn stop_pid(pid: u32) {
+    unsafe {
+        let _ = libc::kill(pid as i32, libc::SIGTERM);
+    }
+}

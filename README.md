@@ -28,13 +28,13 @@ No nonsense.
 ### Windows
 
 ```powershell
-irm https://raw.githubusercontent.com/builtbyjonas/keylaut/main/scripts/install.ps1 | iex
+irm https://keylaut.byjonas.dev/install.ps1 | iex
 ```
 
 ### macOS / Linux
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/builtbyjonas/keylaut/main/scripts/install.sh | sh
+curl -fsSL https://keylaut.byjonas.dev/install.sh | sh
 ```
 
 *Prefer building from source?*

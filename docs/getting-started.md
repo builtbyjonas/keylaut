@@ -10,7 +10,7 @@ Keylaut is a tiny, native background utility that allows you to type German char
 Run the install script in your terminal:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/builtbyjonas/keylaut/main/scripts/install.sh | sh
+curl -fsSL https://keylaut.byjonas.dev/install.sh | sh
 ```
 
 This installs the `keylaut` binary to `~/.local/bin/keylaut` and configures automatic login startup.
@@ -19,7 +19,7 @@ This installs the `keylaut` binary to `~/.local/bin/keylaut` and configures auto
 Run in PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/builtbyjonas/keylaut/main/scripts/install.ps1 | iex
+irm https://keylaut.byjonas.dev/install.ps1 | iex
 ```
 
 ### From Source
@@ -107,10 +107,10 @@ To completely remove Keylaut and its startup configuration:
 
 ### macOS / Linux
 ```bash
-curl -fsSL https://raw.githubusercontent.com/builtbyjonas/keylaut/main/scripts/uninstall.sh | sh
+curl -fsSL https://keylaut.byjonas.dev/uninstall.sh | sh
 ```
 
 ### Windows
 ```powershell
-irm https://raw.githubusercontent.com/builtbyjonas/keylaut/main/scripts/uninstall.ps1 | iex
+irm https://keylaut.byjonas.dev/uninstall.ps1 | iex
 ```

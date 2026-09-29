@@ -1,0 +1,14 @@
+{
+    "name": "keylaut-www",
+    "version": "0.0.0",
+    "scripts": {
+        "start": "node src/index.js",
+        "dev": "nodemon src/index.js"
+    },
+    "dependencies": {
+        "express": "^5.2.1"
+    },
+    "devDependencies": {
+        "nodemon": "^3.1.11"
+    }
+}

@@ -24,11 +24,12 @@ fn default_mappings() -> HashMap<String, String> {
 }
 
 /// Modifier key held while typing to temporarily bypass character replacement.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum BypassKey {
     /// Option on macOS, Alt on Windows and Linux.
     #[serde(alias = "option")]
+    #[default]
     Alt,
     /// Control key.
     #[serde(alias = "control")]
@@ -40,12 +41,6 @@ pub enum BypassKey {
     Meta,
     /// Bypass disabled (all words subject to normal mapping rules).
     None,
-}
-
-impl Default for BypassKey {
-    fn default() -> Self {
-        Self::Alt
-    }
 }
 
 impl BypassKey {

@@ -14,7 +14,7 @@ categories = ["command-line-utilities", "os"]
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
 serde = { version = "1.0", features = ["derive"] }
-toml = "0.8"
+toml = "1.1"
 dirs = "7.0"
 log = "0.4"
 env_logger = { version = "0.11", default-features = false, features = ["humantime"] }
